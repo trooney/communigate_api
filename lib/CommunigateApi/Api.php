@@ -57,6 +57,13 @@ class Api {
 	private $connected;
 
 	/**
+	 * Cached request responses
+	 *
+	 * @var array
+	 */
+	private $cache = array();
+
+	/**
 	 * Output
 	 *
 	 * The output from any command
@@ -71,6 +78,11 @@ class Api {
 	 * @var boolean
 	 */
 	private $success;
+
+	/**
+	 * @var \Monolog\Logger
+	 */
+	private $logger;
 
 
 	/**
@@ -132,18 +144,14 @@ class Api {
 		}
 
 		$this->connected = true;
-		$this->parse_response(fgets($this->socket)); // chomp welcome string
+		fgets($this->socket); // chomp welcome string
 
+		$this->sendAndParse(self::API_COMMAND_USER . $login);
 
-		$this->send(self::API_COMMAND_USER . $login);
-		$this->parse_response(fgets($this->socket));
-
-		$this->send(self::API_COMMAND_PASS . $password);
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(self::API_COMMAND_PASS . $password);
 
 		/** Set the CLI response to "INLINE", faster repsonse time */
-		$this->send('INLINE');
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse('INLINE');
 
 		return true;
 
@@ -166,6 +174,12 @@ class Api {
 	 * but set the debugging properties of the object.
 	 */
 	public function __construct(array $options) {
+
+		if (array_key_exists('logger', $options)) {
+			$this->logger = $options['logger'];
+			unset($options['logger']);
+		}
+
 		$this->config = $options;
 	}
 
@@ -176,11 +190,9 @@ class Api {
 	 */
 	public function get_domains() {
 		
-		$this->send(self::API_LIST_DOMAINS);
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(self::API_LIST_DOMAINS);
 
 		return $this->success ? $this->output : array();
-
 	}
 
 	/**
@@ -195,8 +207,7 @@ class Api {
 	 */
 	public function get_forwarders($domain, $just_check = FALSE) {
 
-		$this->send(str_replace('$$', $domain, self::API_LIST_FORWARDER));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$$', $domain, self::API_LIST_FORWARDER));
 
 		$forwarders = $this->output;
 		$forwader_array = Array();
@@ -241,8 +252,7 @@ class Api {
 	 */
 	public function get_accounts($domain) {
 		
-		$this->send(str_replace('$$', $domain, self::API_LIST_ACCOUNTS));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$$', $domain, self::API_LIST_ACCOUNTS));
 
 		if ($this->output != NULL) {
 			/** Loop through the accounts and check account name format */
@@ -257,10 +267,7 @@ class Api {
 			}
 		}
 
-		/** If no problems then return the output */
-		if ($this->success) {
-			return $this->output;
-		}
+		return $this->success ? $this->output : null;
 	}
 
 	/**
@@ -274,14 +281,9 @@ class Api {
 	 * @return String
 	 */
 	private function get_account_details($domain, $account) {
+		$this->sendAndParse(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_SETTINGS));
 
-		$this->send(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_SETTINGS));
-		$this->parse_response(fgets($this->socket));
-
-		/** If no problems then return the output */
-		if ($this->success) {
-			return $this->output;
-		}
+		return $this->success ? $this->output : null;
 	}
 
 	/**
@@ -294,16 +296,23 @@ class Api {
 	 * @return String
 	 */
 	private function get_account_rules($domain, $account) {
+		$this->sendAndParse(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_RULES));
 
-		$this->send(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_RULES));
-		$this->parse_response(fgets($this->socket));
-
-		/** If no problems then return the output */
-		if ($this->success) {
-			return $this->output;
-		}
+		return $this->success ? $this->output : null;
 	}
 
+	public function get_account_password($domain, $account) {
+		$output = $this->get_account_details($domain, $account);
+
+		$password = null;
+
+		foreach ($output as $value) {
+			if (preg_match('/^Password=(.+)/', $value, $matches)) {
+				$password = isset($matches[1]) ? $matches[1] : null;
+			}
+		}
+		return $password;
+	}
 	/**
 	 * Get account storage
 	 *
@@ -315,14 +324,12 @@ class Api {
 	 */
 	public function get_account_storage($domain, $account) {
 
-		$this->send(str_replace('$account$', $account, str_replace('$domain$', '@' . $domain, self::API_GET_ACCOUNT_INFO)));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$account$', $account, str_replace('$domain$', '@' . $domain, self::API_GET_ACCOUNT_INFO)));
 
 		/** Store the output in local variable */
 		$output = $this->output;
 
-		$this->send(str_replace('$account$', $account, str_replace('$domain$', '@' . $domain, self::API_GET_ACCOUNT_EFF_SETTINGS)));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$account$', $account, str_replace('$domain$', '@' . $domain, self::API_GET_ACCOUNT_EFF_SETTINGS)));
 
 		/** Combine the two outputs */
 		$this->output = array_merge($output, $this->output);
@@ -348,7 +355,6 @@ class Api {
 
 		$this->success = TRUE;
 
-		/** Return results */
 		return Array('max' => (int) $max, 'used' => (int) $storage_used);
 	}
 
@@ -365,8 +371,7 @@ class Api {
 
 		$email = "{$account}@{$domain}";
 
-		$this->send(str_replace('$$', $email, self::API_DELETE_ACCOUNT));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$$', $email, self::API_DELETE_ACCOUNT));
 
 		return true;
 	}
@@ -394,9 +399,7 @@ class Api {
 		$command = str_replace('$name$', $account . '@', $command);
 		$command = str_replace('$password$', $password, $command);
 
-		
-		$this->send($command);
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse($command);
 
 		return true;
 	}
@@ -417,10 +420,8 @@ class Api {
 		$command = str_replace('$account$', $account . '@' . $domain, self::API_RESET_PASSWORD);
 		$command = str_replace('$password$', $password, $command);
 
-		
-		$this->send($command);
-		
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse($command);
+		$this->clearCache();
 
 		return true;
 	}
@@ -441,12 +442,8 @@ class Api {
 		$command = str_replace('$old_account$', $account . '@' . $domain, self::API_RENAME_ACCOUNT);
 		$command = str_replace('$new_account$', $new_name . '@' . $domain, $command);
 
-		
-		$this->send($command);
-		
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse($command);
 
-		/** Return success */
 		return $this->success;
 	}
 
@@ -504,13 +501,7 @@ class Api {
 			$this->success = FALSE;
 		}
 
-		/** If no success then return FALSE */
-		if (!$this->success) {
-			return false;
-		} else {
-			/** Else if success then return the new setting array */
-			return $new_dict;
-		}
+		return $this->success ? $new_dict : false;
 	}
 
 	/**
@@ -534,8 +525,7 @@ class Api {
 	private function set_account_rule($domain, $account, $rule, $setting) {
 		
 		/** Not using the internal get_rule because it returns the rules value */
-		$this->send(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_SETTINGS));
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_SETTINGS));
 
 		/** Only get the rules setting */
 		foreach ($this->output as $value) {
@@ -657,10 +647,8 @@ class Api {
 		$command = str_replace('$account$', $account . '@' . $domain, self::API_UPDATE_ACCOUNT_SETTINGS);
 		$command = str_replace('$setting$', '{Rules=' . $rules . ';}', $command);
 
-		$this->send($command);
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse($command);
 
-		/** Return success */
 		return $this->success;
 	}
 
@@ -682,21 +670,21 @@ class Api {
 		$command = str_replace('$account$', $account . '@' . $domain, self::API_UPDATE_ACCOUNT_SETTINGS);
 		$command = str_replace('$setting$', '{MaxAccountSize=' . $max_size . ';}', $command);
 
-		
-		$this->send($command);
-		$this->parse_response(fgets($this->socket));
+		$this->sendAndParse($command);
+		$this->clearCache();
 
-		/** Return success */
 		return $this->success;
 	}
 
 	public function set_account_email_redirect($domain, $account, $email) {
 		$this->set_account_rule($domain, $account, $email, Array('#redirect', '"Mirror to",', self::API_EMAIL_REDIRECT_STRUCT));
+		$this->clearCache();
 		return $this->success;
 	}
 
 	public function set_account_vacation_message($domain, $account, $message) {
 		$this->set_account_rule($domain, $account, $message, Array('#vacation', '"Reply with",', self::API_VACATION_STRUCT));
+		$this->clearCache();
 		return $this->success;
 	}
 
@@ -732,7 +720,23 @@ class Api {
 		return $this->success;
 	}
 
+	/**
+	 * Send a command and automatically parse the response
+	 *
+	 * @param $command
+	 * @return bool
+	 */
+	private function sendAndParse($command) {
+		$response = $this->send($command);
+		return $this->parse_response($response);
+	}
 
+	/**
+	 * Clear the request response cache
+	 */
+	public function clearCache() {
+		$this->cache = array();
+	}
 
 	/**
 	 * Send command
@@ -741,14 +745,27 @@ class Api {
 	 * to the CG CLI.
 	 *
 	 * @param $command
+	 * @return string
 	 */
 	private function send($command) {
 		if (!$this->connected) {
 			$this->connect();
 		}
 
-		/** Send the command, all commmand must have a ENTER after it; so add it */
+		if ($this->logger && method_exists($this->logger, 'info')) {
+			if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
+				$this->logger->info('Communigate API: ' . $command);
+			}
+		}
+
+		$hash = md5($command);
+
+		if (array_key_exists($hash, $this->cache)) {
+			return $this->cache[$hash];
+		}
+
 		fputs($this->socket, $command . chr(10));
+		return $this->cache[$hash] = fgets($this->socket);
 	}
 
 	/**
