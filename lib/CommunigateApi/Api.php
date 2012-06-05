@@ -251,23 +251,15 @@ class Api {
 	 * @return mixed
 	 */
 	public function get_accounts($domain) {
-		
-		$this->sendAndParse(str_replace('$$', $domain, self::API_LIST_ACCOUNTS));
 
-		if ($this->output != NULL) {
-			/** Loop through the accounts and check account name format */
-			foreach ($this->output as $key => $account) {
-				/**
-				 * Accounts come out like ACCOUNT_NAME = ACCOUNT_TYPE, so we check to make sure
-				 * this is true and thusly we then strip off of the account type
-				 */
-				if (!preg_match('/^[_a-z0-9-]+(\.[_a-z0-9-]+)*$/i', $account)) {
-					$this->output[$key] = trim(substr($account, 0, strpos($account, '=')));
-				}
-			}
-		}
+		$response = $this->send(str_replace('$$', $domain, self::API_LIST_ACCOUNTS));
+		$this->parse_response($response);
 
-		return $this->success ? $this->output : null;
+		$accounts = substr($response, 5, -3); // Chop off the 200 { whatever }
+		$accounts = preg_replace('/=.*?;/',';', $accounts);
+		$accounts = explode(';', $accounts);
+
+		return $accounts;
 	}
 
 	/**
@@ -775,7 +767,7 @@ class Api {
 	 * @return bool
 	 * @throws ApiException
 	 */
-	private function parse_response($output) {
+	private function parse_response($output,$autoSubParse = true) {
 
 		/** Set the internal output to the output from the CLI */
 		$this->output = $output;
@@ -790,8 +782,12 @@ class Api {
 
 			/** Else if the output starts with 201 (INLINE success) then set success */
 			$this->success = TRUE;
-			/** Better parsing of the output is needed for the INLINE response */
-			$this->_parse_response();
+
+			if ($autoSubParse) {
+				/** Better parsing of the output is needed for the INLINE response */
+				$this->_parse_response();
+			}
+
 
 		} elseif (array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
 
