@@ -116,6 +116,7 @@ class Api {
 	 */
 	public function connect($options = array()) {
 
+
 		$defaults = array(
 			'host' => '127.0.0.1',
 			'login' => null,
@@ -142,6 +143,11 @@ class Api {
 		if (!$this->socket) {
 			throw new ApiException("Failed to connect to CommunigateApi at {$host}:{$port}");
 		}
+
+		if ($this->logger && method_exists($this->logger, 'info')) {
+				$this->logger->info('Communigate API: Connected to ' . $host . ':' . $port);
+		}
+
 
 		$this->connected = true;
 		fgets($this->socket); // chomp welcome string
@@ -259,6 +265,8 @@ class Api {
 		$accounts = preg_replace('/=.*?;/',';', $accounts);
 		$accounts = explode(';', $accounts);
 
+		array_pop($accounts);
+
 		return $accounts;
 	}
 
@@ -340,9 +348,11 @@ class Api {
 			}
 		}
 
-		if (preg_match('/M/', $max)) {
-			/** convert to megabytes from bytes */
-			$storage_used = round(($storage_used / 1024) / 1024, 2);
+		/** convert all unknown values from bytes to megabytes */
+		foreach (array('max', 'storage_used') as $valToClean) {
+			if (!preg_match('/$(M|K)/i', $$valToClean)) {
+				$$valToClean = round(($$valToClean / 1024) / 1024, 2) . 'M';
+			}
 		}
 
 		$this->success = TRUE;
