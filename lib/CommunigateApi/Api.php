@@ -350,9 +350,10 @@ class Api {
 
 		/** convert all unknown values from bytes to megabytes */
 		foreach (array('max', 'storage_used') as $valToClean) {
-			if (!preg_match('/$(M|K)/i', $$valToClean)) {
-				$$valToClean = round(($$valToClean / 1024) / 1024, 2) . 'M';
+			if (!preg_match('/(M|K)$/i', $$valToClean)) {
+				$$valToClean = round(($$valToClean / 1024) / 1024, 2);
 			}
+
 		}
 
 		$this->success = TRUE;
