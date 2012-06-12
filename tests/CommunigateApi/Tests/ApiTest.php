@@ -2,6 +2,7 @@
 namespace CommunigateApi\Tests;
 
 use CommunigateApi\API;
+use CommunigateApi\ApiException;
 
 class ApiTest extends \PHPUnit_Framework_TestCase {
 
@@ -158,6 +159,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertEquals($expected, $result);
 
+
 	}
 
 	public function test_email_redirect() {
@@ -219,6 +221,10 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertEquals($expected, $result);
 
+	}
+
+	public function test_get_forwarders() {
+		$this->assertEmpty($this->api->get_forwarders('testdomain.bm'));
 	}
 
 

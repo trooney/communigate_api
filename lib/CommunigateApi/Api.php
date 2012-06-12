@@ -25,6 +25,7 @@ class Api {
 	const API_GET_ACCOUNT_RULES = 'GetAccountRules $$';
 	const API_GET_ACCOUNT_SETTINGS = 'GetAccountSettings $$';
 	const API_UPDATE_ACCOUNT_SETTINGS = 'UpdateAccountSettings $account$ $setting$';
+	const API_SET_ACCOUNT_RULES = 'SetAccountMailRules $account$ $rule$';
 	const API_CREATE_ACCOUNT = 'CreateAccount $name$$domain$ {Password = "$password$";}';
 	const API_DELETE_ACCOUNT = 'DeleteAccount $$';
 	const API_RESET_PASSWORD = 'SetAccountPassword $account$ To "$password$"';
@@ -51,6 +52,10 @@ class Api {
 	 */
 	public $socket;
 
+	/**
+	 * @var array Data buffer
+	 */
+	private $buffer = array();
 	/**
 	 * @var boolean Is connected?
 	 */
@@ -104,9 +109,11 @@ class Api {
 		201 => 'OK (inline)',
 		300 => 'Expecting more input',
 		500 => 'failed to read an unquoted string: non a/n data',
+		510 => 'you do not have the required access right',
 		512 => 'Unknown secondary domain name',
+		513 => 'Unknown user account',
 		520 => 'Account name already exists',
-		513 => 'Unknown user account'
+		560 => 'Directory record with the specified DN is not found'
 	);
 
 	/**
@@ -116,13 +123,12 @@ class Api {
 	 */
 	public function connect($options = array()) {
 
-
 		$defaults = array(
 			'host' => '127.0.0.1',
 			'login' => null,
 			'password' => null,
 			'port' => 106,
-			'timeout' => 25,
+			'timeout' => 10,
 		);
 
 		if ($options) {
@@ -137,20 +143,20 @@ class Api {
 		$password = $this->config['password'];
 		$timeout = $this->config['timeout'];
 
-
 		$this->socket = @fsockopen($host, $port, $errno, $errstr, $timeout);
 
 		if (!$this->socket) {
-			throw new ApiException("Failed to connect to CommunigateApi at {$host}:{$port}");
+			throw new ApiException("CommunigateAPI: Failed to connect to at {$host}:{$port}");
 		}
 
 		if ($this->logger && method_exists($this->logger, 'info')) {
-				$this->logger->info('Communigate API: Connected to ' . $host . ':' . $port);
+			$this->logger->info('Communigate API: Connected to ' . $host . ':' . $port);
 		}
 
 
 		$this->connected = true;
 		fgets($this->socket); // chomp welcome string
+		$this->clearCache();
 
 		$this->sendAndParse(self::API_COMMAND_USER . $login);
 
@@ -164,12 +170,12 @@ class Api {
 	}
 
 	public function disconnect() {
+		$this->clearCache();
 		if ($this->socket) {
-			fputs($this->socket, 'QUIT' . chr(10));
-			fread($this->socket, 1024);
+			$this->send('QUIT');
 			fclose($this->socket);
-			$this->socket = NULL;
 		}
+		$this->socket = NULL;
 		$this->connected = false;
 	}
 
@@ -202,50 +208,33 @@ class Api {
 	}
 
 	/**
+	 *
 	 * Get forwarders
 	 *
 	 * This method will return a list of all the forwarders for a domain. It
 	 * will then get the email address that is being forwarded to.
 	 *
-	 * @param string $domain
-	 * @param bool $just_check
-	 * @return array|bool
+	 * @param $domain
+	 * @return array
 	 */
-	public function get_forwarders($domain, $just_check = FALSE) {
+	public function get_forwarders($domain) {
+
+		$forwarders = Array();
 
 		$this->sendAndParse(str_replace('$$', $domain, self::API_LIST_FORWARDER));
 
-		$forwarders = $this->output;
-		$forwader_array = Array();
+		if ($this->output != NULL) {
 
-		if ($just_check && $forwarders) {
-			$this->success = TRUE;
-
-			return $this->success;
-		}
-
-		if ($forwarders != NULL) {
-
-			foreach ($forwarders as $forwarder) {
+			foreach ($this->output as $item) {
 				
-				$this->send(str_replace('$domain$', '@' . $domain, str_replace('$forwarder$', $forwarder, self::API_GET_FORWARDER)));
-				
-				$this->parse_response(fgets($this->socket));
+				$this->parse_response(str_replace('$domain$', '@' . $domain, str_replace('$forwarder$', $item, self::API_GET_FORWARDER)));
 
-				/** Add email forwader to array */
-				$forwader_array[$forwarder] = $this->output[0];
+				$forwarders[$item] = $this->output[0];
 			}
 		}
 
-		/** If there were forwarders then set success and return array */
-		if (count($forwader_array) > 0) {
-			$this->success = TRUE;
+		return $forwarders;
 
-			return $forwader_array;
-		}
-
-		/** Default return false */
-		return $this->success = FALSE;
 	}
 
 	/**
@@ -302,9 +291,10 @@ class Api {
 	}
 
 	public function get_account_password($domain, $account) {
-		$output = $this->get_account_details($domain, $account);
 
 		$password = null;
+
+		$output = $this->get_account_details($domain, $account);
 
 		foreach ($output as $value) {
 			if (preg_match('/^Password=(.+)/', $value, $matches)) {
@@ -493,14 +483,9 @@ class Api {
 				}
 			}
 
-			if ($rule_found) {
-				/** Set the success to TRUE */
-				$this->success = TRUE;
-			} else {
-				$this->success = FALSE;
-			}
+			$this->success = $rule_found ? true : false;
+
 		} else {
-			/** Else there is no setting so set the success to FALSE */
 			$this->success = FALSE;
 		}
 
@@ -647,8 +632,8 @@ class Api {
 		}
 
 		/** Setup the command */
-		$command = str_replace('$account$', $account . '@' . $domain, self::API_UPDATE_ACCOUNT_SETTINGS);
-		$command = str_replace('$setting$', '{Rules=' . $rules . ';}', $command);
+		$command = str_replace('$account$', $account . '@' . $domain, self::API_SET_ACCOUNT_RULES);
+		$command = str_replace('$rule$', $rules, $command);
 
 		$this->sendAndParse($command);
 
@@ -762,13 +747,26 @@ class Api {
 		}
 
 		$hash = md5($command);
-
 		if (array_key_exists($hash, $this->cache)) {
 			return $this->cache[$hash];
 		}
 
 		fputs($this->socket, $command . chr(10));
-		return $this->cache[$hash] = fgets($this->socket);
+		$this->buffer[] = $command;
+
+		if (feof($this->socket)) {
+			throw new ApiException('CommunigateAPI: Socket terminated early');
+		}
+
+		$this->cache[$hash] = fgets($this->socket);
+		$this->buffer[] = $this->cache[$hash];
+		//$this->buffer[] = $this->cache[$hash];
+
+		return $this->cache[$hash];
+	}
+
+	public function buffer() {
+		return $this->buffer;
 	}
 
 	/**
@@ -778,12 +776,14 @@ class Api {
 	 * @return bool
 	 * @throws ApiException
 	 */
-	private function parse_response($output,$autoSubParse = true) {
+	private function parse_response($output) {
 
 		/** Set the internal output to the output from the CLI */
 		$this->output = $output;
 		$response_code = substr($this->output, 0, 3);
+
 		/** If the output was successfull response then return success */
+
 		if (preg_match('/^200 ok/', $this->output)) {
 
 			$this->success = TRUE;
@@ -793,14 +793,9 @@ class Api {
 
 			/** Else if the output starts with 201 (INLINE success) then set success */
 			$this->success = TRUE;
+			$this->_parse_response();
 
-			if ($autoSubParse) {
-				/** Better parsing of the output is needed for the INLINE response */
-				$this->_parse_response();
-			}
-
-
-		} elseif (array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
+		} elseif ($response_code && array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
 
 			if ($response_code >= 500) {
 				$this->success = FALSE;
@@ -808,9 +803,10 @@ class Api {
 				throw new ApiException("CGC Error {$response_code} - {$error_string}");
 			}
 
-		} else {
+		} elseif($response_code) {
 			throw new ApiException('Unknown error - ' . $this->output);
 		}
+
 	}
 
 	/**
