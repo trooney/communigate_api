@@ -297,7 +297,7 @@ class Api {
 		$output = $this->get_account_details($domain, $account);
 
 		foreach ($output as $value) {
-			if (preg_match('/^Password=(.+)/', $value, $matches)) {
+			if (preg_match('/^Password="?([^"]*)"?/', $value, $matches)) {
 				$password = isset($matches[1]) ? $matches[1] : null;
 			}
 		}
