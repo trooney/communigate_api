@@ -784,7 +784,7 @@ class Api {
 
 		/** If the output was successfull response then return success */
 
-		if (preg_match('/^200 ok/', $this->output)) {
+		if (preg_match('/^200/', $this->output)) {
 
 			$this->success = TRUE;
 			return $this->success;
@@ -795,8 +795,12 @@ class Api {
 			$this->success = TRUE;
 			$this->_parse_response();
 
-		} elseif ($response_code && array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
+		} elseif(preg_match('/^300/', $this->output)) {
+			/** Else if the output starts with 201 (INLINE success) then set success */
+			$this->success = TRUE;
+			$this->_parse_response();
 
+		} elseif ($response_code && array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
 			if ($response_code >= 500) {
 				$this->success = FALSE;
 				$error_string = $this->CGC_KNOWN_RESPONSES[$response_code];
