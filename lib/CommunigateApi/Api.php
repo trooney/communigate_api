@@ -297,7 +297,7 @@ class Api {
 		$output = $this->get_account_details($domain, $account);
 
 		foreach ($output as $value) {
-			if (preg_match('/^Password=(.+)/', $value, $matches)) {
+			if (preg_match('/^Password="?([^"]*)"?/', $value, $matches)) {
 				$password = isset($matches[1]) ? $matches[1] : null;
 			}
 		}
@@ -383,7 +383,7 @@ class Api {
 	public function create_account($domain, $account, $password) {
 
 		/** Make sure that account name is in correct format */
-		if (!preg_match('/^[_a-z0-9-]+(\.[_a-z0-9-]+)*$/', $account)) {
+		if (!preg_match('/^[a-zA-Z0-9,._%+-]+$/i', $account)) {
 			throw new ApiException('Invalid account name');
 		}
 
