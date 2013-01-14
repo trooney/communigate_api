@@ -20,6 +20,8 @@ class Api {
 	/** Commands that this object can run */
 	const API_COMMAND_USER = 'USER ';
 	const API_COMMAND_PASS = 'PASS ';
+    const API_COMMAND_INLINE = 'INLINE';
+    const API_COMMAND_QUIT = 'INLINE';
 	const API_LIST_DOMAINS = 'ListDomains';
 	const API_LIST_ACCOUNTS = 'ListAccounts $$';
 	const API_GET_ACCOUNT_RULES = 'GetAccountRules $$';
@@ -36,9 +38,13 @@ class Api {
 	const API_GET_ACCOUNT_EFF_SETTINGS = 'GetAccountEffectiveSettings $account$$domain$';
 	const API_GET_CONTROLLER = 'GetCurrentController';
 
+
 	/** Rules structures */
 	const API_VACATION_STRUCT = '( 2, "#Vacation", (("Human Generated", "---"), (From, "not in", "#RepliedAddresses")), ( ("Reply with", "$$"), ("Remember \'From\' in", RepliedAddresses) ) )';
 	const API_EMAIL_REDIRECT_STRUCT = '( 1, "#Redirect", (), (("Mirror to", "$$"), (Discard, "---")) )';
+
+    const TYPE_SEND = 'SEND';
+    const TYPE_RECEIVE = 'RECEIVE';
 
 	/**
 	 * @var array Connection configuration
@@ -84,6 +90,13 @@ class Api {
 	 */
 	private $success;
 
+    /**
+     * Toggles console output
+     *
+     * @var bool
+     */
+    private $verbose;
+
 	/**
 	 * @var \Monolog\Logger
 	 */
@@ -104,16 +117,10 @@ class Api {
 	 *
 	 * @var Array
 	 */
-	private $CGC_KNOWN_RESPONSES = Array(
+	private $CGC_KNOWN_SUCCESS_CODES = Array(
 		200 => 'OK',
 		201 => 'OK (inline)',
 		300 => 'Expecting more input',
-		500 => 'failed to read an unquoted string: non a/n data',
-		510 => 'you do not have the required access right',
-		512 => 'Unknown secondary domain name',
-		513 => 'Unknown user account',
-		520 => 'Account name already exists',
-		560 => 'Directory record with the specified DN is not found'
 	);
 
 	/**
@@ -149,9 +156,7 @@ class Api {
 			throw new ApiException("CommunigateAPI: Failed to connect to at {$host}:{$port}");
 		}
 
-		if ($this->logger && method_exists($this->logger, 'info')) {
-			$this->logger->info('Communigate API: Connected to ' . $host . ':' . $port);
-		}
+        $this->log('Connected to ' . $host, self::TYPE_SEND);
 
 
 		$this->connected = true;
@@ -163,7 +168,7 @@ class Api {
 		$this->sendAndParse(self::API_COMMAND_PASS . $password);
 
 		/** Set the CLI response to "INLINE", faster repsonse time */
-		$this->sendAndParse('INLINE');
+		$this->sendAndParse(self::API_COMMAND_INLINE);
 
 		return true;
 
@@ -172,7 +177,7 @@ class Api {
 	public function disconnect() {
 		$this->clearCache();
 		if ($this->socket) {
-			$this->send('QUIT');
+			$this->send(self::API_COMMAND_QUIT);
 			fclose($this->socket);
 		}
 		$this->socket = NULL;
@@ -192,6 +197,11 @@ class Api {
 			unset($options['logger']);
 		}
 
+        if (array_key_exists('verbose', $options)) {
+            $this->verbose = (bool)$options['verbose'];
+            unset($options['verbose']);
+        }
+
 		$this->config = $options;
 	}
 
@@ -201,7 +211,7 @@ class Api {
 	 * Returns a list of domains
 	 */
 	public function get_domains() {
-		
+
 		$this->sendAndParse(self::API_LIST_DOMAINS);
 
 		return $this->success ? $this->output : array();
@@ -226,7 +236,7 @@ class Api {
 		if ($this->output != NULL) {
 
 			foreach ($this->output as $item) {
-				
+
 				$this->parse_response(str_replace('$domain$', '@' . $domain, str_replace('$forwarder$', $item, self::API_GET_FORWARDER)));
 
 				$forwarders[$item] = $this->output[0];
@@ -408,7 +418,7 @@ class Api {
 	 * @return bool
 	 */
 	public function reset_password($domain, $account, $password) {
-		
+
 		/** Create the command */
 		$command = str_replace('$account$', $account . '@' . $domain, self::API_RESET_PASSWORD);
 		$command = str_replace('$password$', $password, $command);
@@ -430,7 +440,7 @@ class Api {
 	 * @return bool
 	 */
 	public function rename_account($domain, $account, $new_name) {
-		
+
 		/** Create the command */
 		$command = str_replace('$old_account$', $account . '@' . $domain, self::API_RENAME_ACCOUNT);
 		$command = str_replace('$new_account$', $new_name . '@' . $domain, $command);
@@ -452,7 +462,7 @@ class Api {
 	 * @return array|bool
 	 */
 	private function get_account_rule($domain, $account, $rule) {
-		
+
 		/** Rule found boolean */
 		$rule_found = FALSE;
 
@@ -463,7 +473,7 @@ class Api {
 		$setting = $this->get_account_rules($domain, $account);
 
 		/** If there is a rule setting ... */
-		if (isset($setting)) {
+		if (isset($setting) && $setting) {
 
 			/** Loop through the array so we can test the values */
 			foreach ($setting as $value) {
@@ -511,7 +521,7 @@ class Api {
 	 * @return bool success
 	 */
 	private function set_account_rule($domain, $account, $rule, $setting) {
-		
+
 		/** Not using the internal get_rule because it returns the rules value */
 		$this->sendAndParse(str_replace('$$', $account . '@' . $domain, self::API_GET_ACCOUNT_SETTINGS));
 
@@ -726,92 +736,128 @@ class Api {
 		$this->cache = array();
 	}
 
-	/**
-	 * Send command
-	 *
-	 * This method will send a command through the socket
-	 * to the CG CLI.
-	 *
-	 * @param $command
-	 * @return string
-	 */
-	private function send($command) {
-		if (!$this->connected) {
-			$this->connect();
-		}
+    /**
+     * Send command
+     *
+     * This method will send a command through the socket
+     * to the CG CLI.
+     *
+     * @param string $command Command sent over socket
+     * @return mixed
+     * @throws ApiException
+     */
+    private function send($command)
+    {
+        if (!$this->connected) {
+            $this->connect();
+        }
 
-		if ($this->logger && method_exists($this->logger, 'info')) {
-			if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
-				$this->logger->info('Communigate API: ' . $command);
-			}
-		}
+        $hash = md5($command);
+        if (array_key_exists($hash, $this->cache)) {
+            return $this->cache[$hash];
+        }
 
-		$hash = md5($command);
-		if (array_key_exists($hash, $this->cache)) {
-			return $this->cache[$hash];
-		}
+        if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
+            $this->log($command, self::TYPE_SEND);
+        }
 
-		fputs($this->socket, $command . chr(10));
-		$this->buffer[] = $command;
+        fputs($this->socket, $command . chr(10));
+        $this->buffer[] = $command;
 
-		if (feof($this->socket)) {
-			throw new ApiException('CommunigateAPI: Socket terminated early');
-		}
+        if (feof($this->socket)) {
+            print_r($this->buffer);
+            throw new ApiException('CommunigateAPI: Socket terminated early');
+        }
 
-		$this->cache[$hash] = fgets($this->socket);
-		$this->buffer[] = $this->cache[$hash];
-		//$this->buffer[] = $this->cache[$hash];
+        $this->cache[$hash] = fgets($this->socket);
+        $this->buffer[] = $this->cache[$hash];
 
-		return $this->cache[$hash];
-	}
+        $this->log($this->cache[$hash], self::TYPE_RECEIVE);
 
-	public function buffer() {
-		return $this->buffer;
-	}
+        return $this->cache[$hash];
+    }
 
-	/**
-	 * Parse response
-	 *
-	 * @param string $output Output from the CLI
-	 * @return bool
-	 * @throws ApiException
-	 */
-	private function parse_response($output) {
+    /**
+     * Log a message
+     *
+     * One:
+     *  When verbose mode is enabled, log directly to console.
+     *
+     * Two:
+     *  When Monologger is available, log to monolog object
+     *
+     * @param string $message
+     * @param string $type
+     */
+    protected function log($message, $type = null)
+    {
 
-		/** Set the internal output to the output from the CLI */
-		$this->output = $output;
-		$response_code = substr($this->output, 0, 3);
+        $message = str_replace("\n", '', $message);
 
-		/** If the output was successfull response then return success */
+        // Make it pretty
+        $formatted = sprintf(
+            '[Communigate %s] %s',
+            $this->config['host'],
+            $message
+        );
 
-		if (preg_match('/^200/', $this->output)) {
+        // For verbose mode
+        if ($this->verbose) {
+            echo $formatted . "\n";
+        }
 
-			$this->success = TRUE;
-			return $this->success;
+        // For monolog
+        if (is_object($this->logger)
+            && method_exists($this->logger, 'info')
+            && $type == self::TYPE_SEND
+        ) {
+            $this->logger->info($formatted);
+        }
+    }
 
-		} elseif (preg_match('/^201/', $this->output)) {
+    /**
+     * Return the send receive buffer
+     *
+     * @return array
+     */
+    public function buffer()
+    {
+        return $this->buffer;
+    }
 
-			/** Else if the output starts with 201 (INLINE success) then set success */
-			$this->success = TRUE;
-			$this->_parse_response();
+    /**
+     * Parse response
+     *
+     * @param string $output Output from the CLI
+     * @return bool
+     * @throws ApiException
+     */
+    public function parse_response($output)
+    {
 
-		} elseif(preg_match('/^300/', $this->output)) {
-			/** Else if the output starts with 201 (INLINE success) then set success */
-			$this->success = TRUE;
-			$this->_parse_response();
+        if (!preg_match('/^(\d{3}) (.+)$/', $output, $matches)) {
+            throw new ApiException('Malformed response');
+        }
 
-		} elseif ($response_code && array_key_exists($response_code, $this->CGC_KNOWN_RESPONSES)) {
-			if ($response_code >= 500) {
-				$this->success = FALSE;
-				$error_string = $this->CGC_KNOWN_RESPONSES[$response_code];
-				throw new ApiException("CGC Error {$response_code} - {$error_string}");
-			}
+        $this->output = '';
+        $code = (int)$matches[1];
+        $body = (string)$matches[2];
 
-		} elseif($response_code) {
-			throw new ApiException('Unknown error - ' . $this->output);
-		}
+        if (!array_key_exists($code, $this->CGC_KNOWN_SUCCESS_CODES)) {
+            $exceptionMessage = sprintf('CGC Error %s - %s',
+                $code,
+                $body
+            );
+            throw new ApiException($exceptionMessage);
+        } else {
+            $this->output = $output;
+            $this->_parse_response();
+            return $this->success = TRUE;
+        }
 
-	}
+        return $this->success = FALSE;
+
+    }
 
 	/**
 	 * _parse response

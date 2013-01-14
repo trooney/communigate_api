@@ -35,6 +35,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	public function tearDown() {
 		$this->api->delete_account($this->domain, $this->account);
+        $this->api->disconnect();
 	}
 
 	private function getConfig() {
@@ -47,7 +48,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 	}
 
 	/**
-	 * @expectedException CommunigateApi\ApiException
+	 * @expectedException \CommunigateApi\ApiException
 	 */
 	public function test_connect_failed() {
 		$api = new Api(array(
@@ -159,7 +160,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertEquals($expected, $result);
 
-
 	}
 
 	public function test_email_redirect() {
@@ -198,7 +198,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	}
 
-
 	public function test_storage() {
 		$expected = array('max' => 50, 'used' => 0);
 		$result = $this->api->get_account_storage(
@@ -226,7 +225,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 	public function test_get_forwarders() {
 		$this->assertEmpty($this->api->get_forwarders('testdomain.bm'));
 	}
-
 
 }
 
