@@ -8,7 +8,7 @@
          processIsolation="false"
          stopOnFailure="false"
          syntaxCheck="false"
-         bootstrap="./tests/Communigate/Tests/TestInit.php"
+         bootstrap="./tests/CommunigateApi/Tests/TestInit.php"
 	>
 
 	<php>
@@ -19,8 +19,8 @@
 	</php>
 
 	<testsuites>
-		<testsuite name="Communigate test suite">
-			<directory>./tests/Communigate/Tests</directory>
+		<testsuite name="Communigate Test Suite">
+			<directory>./tests/CommunigateApi/Tests</directory>
 		</testsuite>
 	</testsuites>
 </phpunit>
