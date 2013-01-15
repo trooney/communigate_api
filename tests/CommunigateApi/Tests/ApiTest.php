@@ -44,8 +44,10 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			'login' => $GLOBALS['cgcadmin_login'],
 			'password' => $GLOBALS['cgcadmin_password'],
 			'port' => $GLOBALS['cgcadmin_port'],
+            'verbose' => $GLOBALS['cgcadmin_verbose']
 		);
 	}
+
 
 	/**
 	 * @expectedException \CommunigateApi\ApiException
@@ -161,7 +163,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		$this->assertEquals($expected, $result);
 
 	}
-
 	public function test_email_redirect() {
 		$result = $this->api->get_account_email_redirect(
 			$this->domain,
@@ -226,6 +227,23 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		$this->assertEmpty($this->api->get_forwarders('testdomain.bm'));
 	}
 
+
+    public function test_parse_account_settings_to_rules_array_a()
+    {
+        $data = array(
+            'MaxAccountSize=50M',
+            'Password=wakka',
+            'RulesAllowed="Filter Only"',
+            'Rules=((1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))),(0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))))'
+        );
+
+        $expected = array(
+            '1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))',
+            '0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))'
+        );
+        $result = $this->api->parse_processed_output_to_rules_array($data);
+        $this->assertEquals($expected, $result);
+    }
 }
 
 ?>

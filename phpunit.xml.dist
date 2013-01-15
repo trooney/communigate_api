@@ -16,6 +16,7 @@
 		<var name="cgcadmin_login" value="root"/>
 		<var name="cgcadmin_password" value=""/>
 		<var name="cgcadmin_port" value="106"/>
+        <var name="cgcadmin_verbose" value="false"/>
 	</php>
 
 	<testsuites>
