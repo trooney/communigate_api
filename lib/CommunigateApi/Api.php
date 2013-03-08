@@ -714,7 +714,7 @@ class Api {
 	public function get_account_vacation_message($domain, $account) {
         $r = $this->get_account_rule($domain, $account, '#vacation');
 
-        if (preg_match('/\("Reply with","(.+?)"\),/i', $r, $matches)) {
+        if (preg_match('/\("Reply with","?(.+?)"?\),/i', $r, $matches)) {
             return str_replace('\e', chr(10), $matches[1]);
         }
 

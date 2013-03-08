@@ -135,14 +135,31 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertNull($result);
 
+
+        // Communigate's GetAccountEffectiveSettings leaves this message unquoted
+        $result = $this->api->set_account_vacation_message(
+            $this->domain,
+            $this->account,
+            'noquotes'
+        );
+        $this->assertTrue($result);
+
+        $expected = 'noquotes';
+        $result = $this->api->get_account_vacation_message(
+            $this->domain,
+            $this->account
+        );
+        $this->assertEquals($expected, $result);
+
+        // Communigate's GetAccountEffectiveSettings surrounds this message in quotes
 		$result = $this->api->set_account_vacation_message(
 			$this->domain,
 			$this->account,
-			'Away message'
+			'triggers quotes'
 		);
 		$this->assertTrue($result);
 
-		$expected = 'Away message';
+		$expected = 'triggers quotes';
 		$result = $this->api->get_account_vacation_message(
 			$this->domain,
 			$this->account
