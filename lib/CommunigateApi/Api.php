@@ -690,6 +690,7 @@ class Api {
 	}
 
 	public function set_account_email_redirect($domain, $account, $email) {
+        $email = preg_replace('/,|;/','\e', $email);
 		$this->set_account_rule($domain, $account, $email, Array('#redirect', '"Mirror to",', self::API_EMAIL_REDIRECT_STRUCT));
 		$this->clearCache();
 		return $this->success;
@@ -704,8 +705,8 @@ class Api {
 	public function get_account_email_redirect($domain, $account) {
 		$r = $this->get_account_rule($domain, $account, '#redirect');
 
-        if (preg_match('/\("Mirror to",(.+?)\)/i', $r, $matches)) {
-            return $matches[1];
+        if (preg_match('/\("Mirror to","?(.+?)"?\)/i', $r, $matches)) {
+            return str_replace('\e', ';', $matches[1]);
         }
 
         return null;

@@ -178,15 +178,18 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			$this->account
 		);
 		$this->assertEquals($expected, $result);
-
 	}
+
 	public function test_email_redirect() {
+
+        // Check non-existant account
 		$result = $this->api->get_account_email_redirect(
 			$this->domain,
 			$this->account
 		);
 		$this->assertNull($result);
 
+        // Set redirect
 		$result = $this->api->set_account_email_redirect(
 			$this->domain,
 			$this->account,
@@ -194,6 +197,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertTrue($result);
 
+        // Check redirect was indeed set
 		$expected = 'dev@null.com';
 		$result = $this->api->get_account_email_redirect(
 			$this->domain,
@@ -201,6 +205,22 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertEquals($expected, $result);
 
+        // Set multiple redirect
+        $result = $this->api->set_account_email_redirect(
+            $this->domain,
+            $this->account,
+            'dev@null.com;dev2@null.com'
+        );
+
+        // Check multiple redirect was indeed set
+        $expected = 'dev@null.com;dev2@null.com';
+        $result = $this->api->get_account_email_redirect(
+            $this->domain,
+            $this->account
+        );
+        $this->assertEquals($expected, $result);
+
+        // Clear redirect
 		$result = $this->api->clear_account_email_redirect(
 			$this->domain,
 			$this->account
@@ -213,7 +233,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			$this->account
 		);
 		$this->assertEquals($expected, $result);
-
 	}
 
 	public function test_storage() {
