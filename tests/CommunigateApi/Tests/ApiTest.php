@@ -35,7 +35,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	public function tearDown() {
 		$this->api->delete_account($this->domain, $this->account);
-        $this->api->disconnect();
+		$this->api->disconnect();
 	}
 
 	private function getConfig() {
@@ -44,7 +44,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			'login' => $GLOBALS['cgcadmin_login'],
 			'password' => $GLOBALS['cgcadmin_password'],
 			'port' => $GLOBALS['cgcadmin_port'],
-            'verbose' => $GLOBALS['cgcadmin_verbose']
+			'verbose' => $GLOBALS['cgcadmin_verbose']
 		);
 	}
 
@@ -136,22 +136,22 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		$this->assertNull($result);
 
 
-        // Communigate's GetAccountEffectiveSettings leaves this message unquoted
-        $result = $this->api->set_account_vacation_message(
-            $this->domain,
-            $this->account,
-            'noquotes'
-        );
-        $this->assertTrue($result);
+		// Communigate's GetAccountEffectiveSettings leaves this message unquoted
+		$result = $this->api->set_account_vacation_message(
+			$this->domain,
+			$this->account,
+			'noquotes'
+		);
+		$this->assertTrue($result);
 
-        $expected = 'noquotes';
-        $result = $this->api->get_account_vacation_message(
-            $this->domain,
-            $this->account
-        );
-        $this->assertEquals($expected, $result);
+		$expected = 'noquotes';
+		$result = $this->api->get_account_vacation_message(
+			$this->domain,
+			$this->account
+		);
+		$this->assertEquals($expected, $result);
 
-        // Communigate's GetAccountEffectiveSettings surrounds this message in quotes
+		// Communigate's GetAccountEffectiveSettings surrounds this message in quotes
 		$result = $this->api->set_account_vacation_message(
 			$this->domain,
 			$this->account,
@@ -182,14 +182,14 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	public function test_email_redirect() {
 
-        // Check non-existant account
+		// Check non-existant account
 		$result = $this->api->get_account_email_redirect(
 			$this->domain,
 			$this->account
 		);
 		$this->assertNull($result);
 
-        // Set redirect
+		// Set redirect
 		$result = $this->api->set_account_email_redirect(
 			$this->domain,
 			$this->account,
@@ -197,7 +197,7 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertTrue($result);
 
-        // Check redirect was indeed set
+		// Check redirect was indeed set
 		$expected = 'dev@null.com';
 		$result = $this->api->get_account_email_redirect(
 			$this->domain,
@@ -205,22 +205,22 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		);
 		$this->assertEquals($expected, $result);
 
-        // Set multiple redirect
-        $result = $this->api->set_account_email_redirect(
-            $this->domain,
-            $this->account,
-            'dev@null.com;dev2@null.com'
-        );
+		// Set multiple redirect
+		$result = $this->api->set_account_email_redirect(
+			$this->domain,
+			$this->account,
+			'dev@null.com;dev2@null.com'
+		);
 
-        // Check multiple redirect was indeed set
-        $expected = 'dev@null.com;dev2@null.com';
-        $result = $this->api->get_account_email_redirect(
-            $this->domain,
-            $this->account
-        );
-        $this->assertEquals($expected, $result);
+		// Check multiple redirect was indeed set
+		$expected = 'dev@null.com;dev2@null.com';
+		$result = $this->api->get_account_email_redirect(
+			$this->domain,
+			$this->account
+		);
+		$this->assertEquals($expected, $result);
 
-        // Clear redirect
+		// Clear redirect
 		$result = $this->api->clear_account_email_redirect(
 			$this->domain,
 			$this->account
@@ -264,22 +264,22 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 	}
 
 
-    public function test_parse_account_settings_to_rules_array_a()
-    {
-        $data = array(
-            'MaxAccountSize=50M',
-            'Password=wakka',
-            'RulesAllowed="Filter Only"',
-            'Rules=((1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))),(0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))))'
-        );
+	public function test_parse_account_settings_to_rules_array_a()
+	{
+		$data = array(
+			'MaxAccountSize=50M',
+			'Password=wakka',
+			'RulesAllowed="Filter Only"',
+			'Rules=((1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))),(0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))))'
+		);
 
-        $expected = array(
-            '1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))',
-            '0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))'
-        );
-        $result = $this->api->parse_processed_output_to_rules_array($data);
-        $this->assertEquals($expected, $result);
-    }
+		$expected = array(
+			'1,"#Redirect",(),(("Mirror to",phpunit@null.com),(Discard,"---"))',
+			'0,"#Vacation",(("Human Generated","---"),(From,"not in","#RepliedAddresses")),(("Reply with",vaca),("Remember \'From\' in",RepliedAddresses))'
+		);
+		$result = $this->api->parse_processed_output_to_rules_array($data);
+		$this->assertEquals($expected, $result);
+	}
 }
 
 ?>
