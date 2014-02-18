@@ -27,15 +27,15 @@ class Api {
 	const API_SET_ACCOUNT_RULES = 'SetAccountMailRules "$account$" $rule$';
 	const API_CREATE_ACCOUNT = 'CreateAccount "$name$$domain$" {Password = "$password$";}';
 	const API_DELETE_ACCOUNT = 'DeleteAccount "$$"';
-	const API_RESET_PASSWORD = 'SetAccountPassword "$account$" To "$password$"';
+	const API_RESET_PASSWORD = 'SetAccountPassword "$account$" PASSWORD "$password$"';
+	const API_VERIFY_PASSWORD = 'VerifyAccountPassword "$account$" PASSWORD "$password$"';
 	const API_RENAME_ACCOUNT = 'RenameAccount "$old_account$" into "$new_account$"';
 	const API_LIST_FORWARDER = 'ListForwarders $$';
 	const API_GET_FORWARDER = 'GetForwarder $forwarder$$domain$';
 	const API_GET_ACCOUNT_INFO = 'GetAccountInfo $account$$domain$';
 	const API_GET_ACCOUNT_EFF_SETTINGS = 'GetAccountEffectiveSettings $account$$domain$';
 	const API_GET_CONTROLLER = 'GetCurrentController';
-
-
+	
 	/** Rules structures */
 	const API_VACATION_STRUCT = '( 2, "#Vacation", (("Human Generated", "---"), (From, "not in", "#RepliedAddresses")), ( ("Reply with", "$$"), ("Remember \'From\' in", RepliedAddresses) ) )';
 	const API_EMAIL_REDIRECT_STRUCT = '( 1, "#Redirect", (), (("Mirror to", "$$"), (Discard, "---")) )';
@@ -411,7 +411,7 @@ class Api {
 	/**
 	 * Reset password
 	 *
-	 * This method will reset an accounts password
+	 * This method will reset an account's password
 	 *
 	 * @param $domain
 	 * @param $account
@@ -428,6 +428,38 @@ class Api {
 		$this->clearCache();
 
 		return true;
+	}
+
+	/**
+	 * Verify password
+	 *
+	 * This method will verify an account's password
+	 *
+	 * @param $domain
+	 * @param $account
+	 * @param $password
+	 * @return bool
+	 */
+	public function verify_password($domain, $account, $password) {
+
+		/** Create the command */
+		$command = str_replace('$account$', $account . '@' . $domain, self::API_VERIFY_PASSWORD);
+		$command = str_replace('$password$', $password, $command);
+
+		try {
+			$this->sendAndParse($command);
+		} catch (ApiException $e) {
+
+			// Check for invalid password code, otherwise pass along exception
+			if (515 == $e->getCode()) {
+				return false;
+			} else {
+				throw $e;
+			}
+		}
+		
+		
+		return $this->success;
 	}
 
 	/**
@@ -768,6 +800,7 @@ class Api {
 			return $this->cache[$hash];
 		}
 
+		// @NOTE This can be a little spammy
 		if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
 			$this->log($command, self::TYPE_SEND);
 		}
@@ -858,7 +891,7 @@ class Api {
 				$code,
 				$body
 			);
-			throw new ApiException($exceptionMessage);
+			throw new ApiException($exceptionMessage, $code);
 		} else {
 			$this->output = $output;
 			$this->_parse_response();
@@ -884,6 +917,8 @@ class Api {
 			return $this->success = FALSE;
 		}
 
+		// strip out any newline characters
+		$this->output = str_replace(["\n", "\r"], '', $this->output);
 
 		/** If the output start with a ( = array format then ... */
 		if (preg_match('/^201 \(/', $this->output) && !preg_match('/^201 \(\(/', $this->output)) {

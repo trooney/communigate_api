@@ -27,6 +27,11 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	public function setUp() {
 		$this->api = new Api($this->getConfig());
+
+		if (false === $this->verifyTestDomainExists()) {
+			die('Aborting test. Cannot find ' . $this->domain);
+		}
+
 		$this->account = 'unit_test_account_' . uniqid();
 		$this->password = 'password_' . uniqid();
 
@@ -40,14 +45,19 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 
 	private function getConfig() {
 		return array(
-			'host' => $GLOBALS['cgcadmin_host'],
-			'login' => $GLOBALS['cgcadmin_login'],
+			'host'     => $GLOBALS['cgcadmin_host'],
+			'login'    => $GLOBALS['cgcadmin_login'],
 			'password' => $GLOBALS['cgcadmin_password'],
-			'port' => $GLOBALS['cgcadmin_port'],
-			'verbose' => $GLOBALS['cgcadmin_verbose']
+			'port'     => $GLOBALS['cgcadmin_port'],
+			'verbose'  => $GLOBALS['cgcadmin_verbose']
 		);
 	}
 
+	private function verifyTestDomainExists() {
+		$domains = $this->api->get_domains();
+
+		return in_array($this->domain, $domains);
+	}
 
 	/**
 	 * @expectedException \CommunigateApi\ApiException
@@ -67,11 +77,17 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 	}
 
 	public function test_get_domains() {
-		$this->assertNotEmpty($this->api->get_domains());
+		$domains = $this->api->get_domains();
+
+		$result = $domains;
+		$this->assertNotEmpty($result);
+
+		$result = in_array($this->domain, $domains);
+		$this->assertTrue($result);
 	}
 
 	public function test_get_accounts() {
-		$this->assertNotEmpty($this->api->get_accounts('testdomain.bm'));
+		$this->assertNotEmpty($this->api->get_accounts($this->domain));
 	}
 
 	public function test_create_and_delete_account() {
@@ -101,6 +117,22 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			$this->password
 		);
 		$this->assertTrue($result);
+	}
+
+	public function test_verify_password() {
+		$result = $this->api->verify_password(
+			$this->domain,
+			$this->account,
+			$this->password
+		);
+		$this->assertTrue($result);
+
+		$result = $this->api->verify_password(
+			$this->domain,
+			$this->account,
+			'badpassword'
+		);
+		$this->assertFalse($result);
 	}
 
 	public function test_rename_account() {

@@ -1,4 +1,4 @@
 .idea
 phpunit.xml
-
+phpunit.*.xml
 /vendor/
