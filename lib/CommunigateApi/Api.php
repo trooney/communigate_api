@@ -15,6 +15,7 @@ use CommunigateApi\ApiException;
 class Api {
 
 	/** Commands that this object can run */
+	const API_ESCAPE = '\e';
 	const API_COMMAND_USER = 'USER ';
 	const API_COMMAND_PASS = 'PASS ';
 	const API_COMMAND_INLINE = 'INLINE';
@@ -373,9 +374,7 @@ class Api {
 	 */
 	public function delete_account($domain, $account) {
 
-		$email = "{$account}@{$domain}";
-
-		$this->sendAndParse(str_replace('$$', $email, self::API_DELETE_ACCOUNT));
+		$this->sendAndParse(str_replace('$$',  $account . '@' . $domain, self::API_DELETE_ACCOUNT));
 
 		return true;
 	}
@@ -398,6 +397,8 @@ class Api {
 			throw new ApiException('Invalid account name');
 		}
 
+		$password = $this->escape($password);
+
 		/** Create the command */
 		$command = str_replace('$domain$', $domain, self::API_CREATE_ACCOUNT);
 		$command = str_replace('$name$', $account . '@', $command);
@@ -419,6 +420,8 @@ class Api {
 	 * @return bool
 	 */
 	public function reset_password($domain, $account, $password) {
+
+		$password = $this->escape($password);
 
 		/** Create the command */
 		$command = str_replace('$account$', $account . '@' . $domain, self::API_RESET_PASSWORD);
@@ -585,7 +588,7 @@ class Api {
 
 		/** Strip carriage return and replace new lines with CommuniGate code \e */
 		foreach ($rules as $key => $rule) {
-			$rules[$key] = str_replace(chr(10), '\e', $rule);
+			$rules[$key] = str_replace(chr(10), self::API_ESCAPE, $rule);
 			$rules[$key] = str_replace("\r", '', $rule);
 		}
 
@@ -801,9 +804,9 @@ class Api {
 		}
 
 		// @NOTE This can be a little spammy
-		if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
+		// if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
 			$this->log($command, self::TYPE_SEND);
-		}
+		// }
 
 		fputs($this->socket, $command . chr(10));
 		$this->buffer[] = $command;
@@ -866,6 +869,16 @@ class Api {
 	public function buffer()
 	{
 		return $this->buffer;
+	}
+
+	/**
+	 * @param string $str String to escape
+	 * @return strin The escaped string
+	 */
+	public function escape($str) {
+		$str = str_replace('\\', '\\\\', $str);
+		$str = str_replace('"', '\"', $str);
+		return $str;
 	}
 
 	/**

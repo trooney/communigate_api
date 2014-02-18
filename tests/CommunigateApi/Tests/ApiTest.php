@@ -117,6 +117,20 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 			$this->password
 		);
 		$this->assertTrue($result);
+
+		$result = $this->api->reset_password(
+			$this->domain,
+			$this->account,
+			'password"with"quotes'
+		);
+		$this->assertTrue($result);
+
+		$result = $this->api->reset_password(
+			$this->domain,
+			$this->account,
+			'password\\with\\slashes'
+		);
+		$this->assertTrue($result);
 	}
 
 	public function test_verify_password() {
