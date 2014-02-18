@@ -268,13 +268,6 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 	}
 
 	public function test_storage() {
-		$expected = array('max' => 50, 'used' => 0);
-		$result = $this->api->get_account_storage(
-			$this->domain,
-			$this->account
-		);
-		$this->assertEquals($expected, $result);
-
 		$result = $this->api->set_account_storage(
 			$this->domain,
 			$this->account,
