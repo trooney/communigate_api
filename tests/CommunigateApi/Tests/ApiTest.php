@@ -133,6 +133,19 @@ class ApiTest extends \PHPUnit_Framework_TestCase {
 		$this->assertTrue($result);
 	}
 
+	/**
+	 * @expectedException \CommunigateApi\ApiException
+	 */
+	public function test_reset_password_failure()
+	{
+		$result = $this->api->reset_password(
+			$this->domain,
+			$this->account,
+			'Foobar is #1'
+		);
+		$this->assertFalse($result);
+	}
+
 	public function test_verify_password() {
 		$result = $this->api->verify_password(
 			$this->domain,
