@@ -165,11 +165,11 @@ class Api {
 	}
 
 	public function disconnect() {
-		$this->clearCache();
 		if ($this->socket) {
-			$this->send(self::API_COMMAND_QUIT);
+            fputs($this->socket, self::API_COMMAND_QUIT . chr(10));
 			fclose($this->socket);
 		}
+        $this->clearCache();
 		$this->socket = NULL;
 		$this->connected = false;
 	}
@@ -803,7 +803,7 @@ class Api {
 		}
 
 		// @NOTE This can be a little spammy
-		if (!preg_match('/^(USER|PASS|INLINE|QUIT)/i', $command)) {
+		if (!preg_match('/^(USER|PASS|INLINE)/i', $command)) {
 			$this->log($command, self::TYPE_SEND);
 		}
 
