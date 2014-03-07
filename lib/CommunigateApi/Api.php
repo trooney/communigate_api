@@ -19,7 +19,7 @@ class Api {
 	const API_COMMAND_USER = 'USER ';
 	const API_COMMAND_PASS = 'PASS ';
 	const API_COMMAND_INLINE = 'INLINE';
-	const API_COMMAND_QUIT = 'INLINE';
+	const API_COMMAND_QUIT = 'QUIT';
 	const API_LIST_DOMAINS = 'ListDomains';
 	const API_LIST_ACCOUNTS = 'ListAccounts "$$"';
 	const API_GET_ACCOUNT_RULES = 'GetAccountRules "$$"';
@@ -36,7 +36,7 @@ class Api {
 	const API_GET_ACCOUNT_INFO = 'GetAccountInfo $account$$domain$';
 	const API_GET_ACCOUNT_EFF_SETTINGS = 'GetAccountEffectiveSettings $account$$domain$';
 	const API_GET_CONTROLLER = 'GetCurrentController';
-	
+
 	/** Rules structures */
 	const API_VACATION_STRUCT = '( 2, "#Vacation", (("Human Generated", "---"), (From, "not in", "#RepliedAddresses")), ( ("Reply with", "$$"), ("Remember \'From\' in", RepliedAddresses) ) )';
 	const API_EMAIL_REDIRECT_STRUCT = '( 1, "#Redirect", (), (("Mirror to", "$$"), (Discard, "---")) )';
@@ -50,20 +50,14 @@ class Api {
 	private $config;
 
 	/**
-	 * Socket pointer
-	 *
-	 * @var socket
+	 * @var resource
 	 */
 	public $socket;
 
 	/**
-	 * @var array Data buffer
-	 */
-	private $buffer = array();
-	/**
 	 * @var boolean Is connected?
 	 */
-	private $connected;
+	public $connected;
 
 	/**
 	 * Cached request responses
@@ -73,11 +67,7 @@ class Api {
 	private $cache = array();
 
 	/**
-	 * Output
-	 *
-	 * The output from any command
-	 *
-	 * @var String
+	 * @var string The results from command
 	 */
 	public $output;
 
@@ -147,11 +137,13 @@ class Api {
 		$login = $this->config['login'];
 		$password = $this->config['password'];
 		$timeout = $this->config['timeout'];
+		$errorCode = '';
+		$errorMessage = '';
 
-		$this->socket = @fsockopen($host, $port, $errno, $errstr, $timeout);
+		$this->socket = @fsockopen($host, $port, $errorCode, $errorMessage, $timeout);
 
 		if (!$this->socket) {
-			throw new ApiException("CommunigateAPI: Failed to connect to at {$host}:{$port}");
+			throw new ApiException("CommunigateAPI: Failed to connect to at {$host}:{$port} ({$errorCode}: {$errorMessage})");
 		}
 
 		$this->log('Connected to ' . $host, self::TYPE_SEND);
@@ -201,6 +193,13 @@ class Api {
 		}
 
 		$this->config = $options;
+	}
+
+	/**
+	 * Disconnect on destruct
+	 */
+	public function __destruct() {
+		$this->disconnect();
 	}
 
 	/**
@@ -460,8 +459,8 @@ class Api {
 				throw $e;
 			}
 		}
-		
-		
+
+
 		return $this->success;
 	}
 
@@ -804,19 +803,23 @@ class Api {
 		}
 
 		// @NOTE This can be a little spammy
-		// if (!preg_match('/(USER|PASS|INLINE)/i', $command)) {
+		if (!preg_match('/^(USER|PASS|INLINE|QUIT)/i', $command)) {
 			$this->log($command, self::TYPE_SEND);
-		// }
+		}
 
 		fputs($this->socket, $command . chr(10));
-		$this->buffer[] = $command;
 
+        // Sometimes we get a random feof from Communigate
+        // Chomp it and try again
 		if (feof($this->socket)) {
+            fgets($this->socket);
+        }
+        if (feof($this->socket)) {
 			throw new ApiException('CommunigateAPI: Socket terminated early');
 		}
 
+        // Use fgets to until end of line
 		$this->cache[$hash] = fgets($this->socket);
-		$this->buffer[] = $this->cache[$hash];
 
 		$this->log($this->cache[$hash], self::TYPE_RECEIVE);
 
@@ -859,16 +862,6 @@ class Api {
 		) {
 			$this->logger->info($formatted);
 		}
-	}
-
-	/**
-	 * Return the send receive buffer
-	 *
-	 * @return array
-	 */
-	public function buffer()
-	{
-		return $this->buffer;
 	}
 
 	/**
